@@ -12,6 +12,9 @@
 #include <QLineEdit>
 #include <QVBoxLayout>
 #include <QDateTime>
+#include <QFileDialog>
+#include <QTextCursor>
+#include <QTextCharFormat>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -28,17 +31,21 @@ public:
 
 private slots:
     void changePin();
+    void openFile();
 
 private:
     void loadTransactions();
     bool checkPin();
     void savePinHash(const QByteArray &hash);
     QByteArray loadPinHash();
+    // функция проверки целостности данных транзакций
+    bool verifyTransactionIntegrity(const QStringList &transactions, QVector<bool> &validityFlags);
 
     Ui::MainWindow *ui;
     QTextEdit *textEdit_transactions;
     QLineEdit *pinLineEdit;
     QPushButton *changePinButton;
+    QPushButton *openFileButton;
     QByteArray storedPinHash;
 };
 

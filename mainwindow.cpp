@@ -26,9 +26,13 @@ MainWindow::MainWindow(QWidget *parent)
     changePinButton = new QPushButton("Сменить пин-код", this);
     layout->addWidget(changePinButton);
 
+    openFileButton = new QPushButton("Открыть", this);
+    layout->addWidget(openFileButton);
+
     setCentralWidget(centralWidget);
 
     connect(changePinButton, &QPushButton::clicked, this, &MainWindow::changePin);
+    connect(openFileButton, &QPushButton::clicked, this, &MainWindow::openFile);
 
     loadTransactions();
 }
@@ -50,25 +54,71 @@ void MainWindow::loadTransactions()
     }
 
     QTextStream in(&file);
-    QString displayText = "=== ТРАНЗАКЦИИ ===\n\n";
+    QStringList transactions;
     
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
-        if (line.isEmpty()) continue;
-        
-        QStringList fields = line.split(',');
+        if (!line.isEmpty()) {
+            transactions.append(line);
+        }
+    }
+    file.close();
+
+    // проверка целостности данных
+    QVector<bool> validityFlags;
+    verifyTransactionIntegrity(transactions, validityFlags);
+    
+    // формирование простого текста для отображения
+    QString displayText = "=== ТРАНЗАКЦИИ ===\n\n";
+    
+    for (int i = 0; i < transactions.size(); ++i) {
+        QStringList fields = transactions[i].split(',');
         if (fields.size() >= 4) {
             QString timeStr = QDateTime::fromSecsSinceEpoch(fields[2].toLongLong()).toString("dd.MM.yyyy hh:mm");
+            
+            bool isValid = (i < validityFlags.size()) ? validityFlags[i] : false;
+            
             displayText += QString("Номер карты: %1\n").arg(fields[0]);
-            displayText += QString("Маршрут: %2\n").arg(fields[1]);
-            displayText += QString("Время: %3\n").arg(timeStr);
-            displayText += QString("Хеш MD5: %4\n").arg(fields[3]);
-            displayText += "---\n";
+            displayText += QString("Маршрут: %1\n").arg(fields[1]);
+            displayText += QString("Время: %1\n").arg(timeStr);
+            displayText += QString("Хеш MD5: %1\n").arg(fields[3]);
+            if (!isValid) {
+                displayText += "⚠ НАРУШЕНА ЦЕЛОСТНОСТЬ ДАННЫХ!\n";
+            }
+            displayText += "-----------------------------------\n";
         }
     }
     
-    textEdit_transactions->setText(displayText);
-    file.close();
+    textEdit_transactions->setPlainText(displayText);
+    
+    // выделение красным цветом нарушенных записей
+    QTextCursor cursor = textEdit_transactions->textCursor();
+    cursor.movePosition(QTextCursor::Start);
+    
+    for (int i = 0; i < transactions.size(); ++i) {
+        bool isValid = (i < validityFlags.size()) ? validityFlags[i] : false;
+        
+        if (!isValid) {
+            // поиск блока транзакции и выделение красным
+            cursor = textEdit_transactions->document()->find("Номер карты:", cursor);
+            if (!cursor.isNull()) {
+                cursor.movePosition(QTextCursor::StartOfLine);
+                for (int j = 0; j < 5; ++j) {
+                    cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+                    cursor.movePosition(QTextCursor::Down, QTextCursor::KeepAnchor);
+                }
+                
+                QTextCharFormat format;
+                format.setForeground(QColor(Qt::red));
+                cursor.mergeCharFormat(format);
+            }
+        } else {
+            cursor = textEdit_transactions->document()->find("Номер карты:", cursor);
+            if (!cursor.isNull()) {
+                cursor.movePosition(QTextCursor::Down, QTextCursor::MoveAnchor, 5);
+            }
+        }
+    }
 }
 
 // проверка пинкода
@@ -134,4 +184,141 @@ QByteArray MainWindow::loadPinHash()
         return hash;
     }
     return QByteArray();
+}
+
+// проверка целостности данных транзакций
+bool MainWindow::verifyTransactionIntegrity(const QStringList &transactions, QVector<bool> &validityFlags)
+{
+    validityFlags.clear();
+    validityFlags.reserve(transactions.size());
+    
+    QString previousHash = "";
+    bool allValid = true;
+    bool foundInvalid = false;
+    
+    for (int i = 0; i < transactions.size(); ++i) {
+        QStringList fields = transactions[i].split(',');
+        if (fields.size() < 4) {
+            validityFlags.append(false);
+            allValid = false;
+            foundInvalid = true;
+            continue;
+        }
+        
+        QString cardNumber = fields[0];
+        QString route = fields[1];
+        QString timestamp = fields[2];
+        QString storedHash = fields[3];
+        
+        bool isValid = true;
+        
+        // если уже найдена нарушенная запись, все последующие тоже считаются нарушенными
+        if (!foundInvalid) {
+            // формируем строку для хеширования согласно формуле
+            QString dataToHash = cardNumber + route + timestamp + previousHash;
+            
+            // вычисляем MD5 хеш
+            QByteArray hash = QCryptographicHash::hash(dataToHash.toUtf8(), QCryptographicHash::Md5);
+            QString calculatedHash = hash.toHex();
+            
+            // проверяем соответствие
+            isValid = (calculatedHash.toLower() == storedHash.toLower());
+            
+            if (!isValid) {
+                foundInvalid = true;
+                allValid = false;
+            }
+        } else {
+            isValid = false;
+        }
+        
+        validityFlags.append(isValid);
+        previousHash = storedHash;
+    }
+    
+    return allValid;
+}
+
+// открытие файла через диалог
+void MainWindow::openFile()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+        "Выберите файл транзакций", "", "CSV файлы (*.csv)");
+    
+    if (fileName.isEmpty())
+        return;
+        
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, "Ошибка", "Не удалось открыть файл!");
+        return;
+    }
+
+    QTextStream in(&file);
+    QStringList transactions;
+    
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (!line.isEmpty()) {
+            transactions.append(line);
+        }
+    }
+    file.close();
+
+    // проверка целостности данных
+    QVector<bool> validityFlags;
+    verifyTransactionIntegrity(transactions, validityFlags);
+    
+    // формирование простого текста для отображения
+    QString displayText = "=== ТРАНЗАКЦИИ ===\n\n";
+    
+    for (int i = 0; i < transactions.size(); ++i) {
+        QStringList fields = transactions[i].split(',');
+        if (fields.size() >= 4) {
+            QString timeStr = QDateTime::fromSecsSinceEpoch(fields[2].toLongLong()).toString("dd.MM.yyyy hh:mm");
+            
+            bool isValid = (i < validityFlags.size()) ? validityFlags[i] : false;
+            
+            displayText += QString("Номер карты: %1\n").arg(fields[0]);
+            displayText += QString("Маршрут: %1\n").arg(fields[1]);
+            displayText += QString("Время: %1\n").arg(timeStr);
+            displayText += QString("Хеш MD5: %1\n").arg(fields[3]);
+            if (!isValid) {
+                displayText += "⚠ НАРУШЕНА ЦЕЛОСТНОСТЬ ДАННЫХ!\n";
+            }
+            displayText += "-----------------------------------\n";
+        }
+    }
+    
+    textEdit_transactions->setPlainText(displayText);
+    
+    // выделение красным цветом нарушенных записей
+    QTextCursor cursor = textEdit_transactions->textCursor();
+    cursor.movePosition(QTextCursor::Start);
+    
+    for (int i = 0; i < transactions.size(); ++i) {
+        bool isValid = (i < validityFlags.size()) ? validityFlags[i] : false;
+        
+        if (!isValid) {
+            // поиск блока транзакции и выделение красным
+            cursor = textEdit_transactions->document()->find("Номер карты:", cursor);
+            if (!cursor.isNull()) {
+                cursor.movePosition(QTextCursor::StartOfLine);
+                for (int j = 0; j < 5; ++j) {
+                    cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+                    cursor.movePosition(QTextCursor::Down, QTextCursor::KeepAnchor);
+                }
+                
+                QTextCharFormat format;
+                format.setForeground(QColor(Qt::red));
+                cursor.mergeCharFormat(format);
+            }
+        } else {
+            cursor = textEdit_transactions->document()->find("Номер карты:", cursor);
+            if (!cursor.isNull()) {
+                cursor.movePosition(QTextCursor::Down, QTextCursor::MoveAnchor, 5);
+            }
+        }
+    }
 }
