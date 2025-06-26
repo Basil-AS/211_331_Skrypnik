@@ -12,4 +12,6 @@
 - Хеш MD5 в кодировке Hex
 
 ## Снимки интерфейса
+![Окно ввода пин-кода](https://github.com/user-attachments/assets/456d9fb3-151d-466c-9ae1-cae8667c9fca)
+![Главное окно](https://github.com/user-attachments/assets/585603aa-d716-4825-be29-649aa1e41374)
 
