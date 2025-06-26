@@ -9,14 +9,18 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 
 set(PROJECT_SOURCES
         main.cpp
         mainwindow.cpp
         mainwindow.h
         mainwindow.ui
+)
+
+set(PROJECT_RESOURCES
+        transactions.csv
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -42,7 +46,16 @@ else()
     endif()
 endif()
 
-target_link_libraries(211_331_Skrypnik PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+# Copy resource files to the build directory
+foreach(RESOURCE_FILE ${PROJECT_RESOURCES})
+    add_custom_command(TARGET 211_331_Skrypnik POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/${RESOURCE_FILE}"
+        "$<TARGET_FILE_DIR:211_331_Skrypnik>"
+    )
+endforeach()
+
+target_link_libraries(211_331_Skrypnik PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

@@ -69,15 +69,36 @@ CMakeLists.txt.user*
 # Python byte code
 *.pyc
 
-# Binaries
-# --------
+# Build artifacts
+build/
+
+# Qt Creator files
+*.pro.user
+*.pro.user.*
+*.user
+
+# CMake files
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Compiled object files, libraries and executables
+*.obj
+*.o
+*.a
+*.lib
+*.so
 *.dll
 *.exe
+*.app
+*.apk
 
-# Directories with generated files
-.moc/
-.obj/
-.pch/
-.rcc/
-.uic/
-/build*/
+# Other generated files
+*.ilk
+*.pdb
+*.stash
+Makefile*
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
